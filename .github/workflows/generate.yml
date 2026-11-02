@@ -1,0 +1,72 @@
+name: Nowe karty (Claude)
+
+on:
+  schedule:
+    # codziennie ok. 5:20 czasu polskiego (zimą), 6:20 (latem) – karty są gotowe na poranek
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+    inputs:
+      cards:
+        description: 'Ile kart wygenerować'
+        default: '3'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: generate
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      saved: ${{ steps.gen.outputs.saved }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Generuj karty
+        id: gen
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LEDGEKNOW_CARDS: ${{ github.event.inputs.cards || vars.LEDGEKNOW_CARDS || '3' }}
+          LEDGEKNOW_MODEL: ${{ vars.LEDGEKNOW_MODEL }}
+          LEDGEKNOW_EFFORT: ${{ vars.LEDGEKNOW_EFFORT }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::Brak sekretu ANTHROPIC_API_KEY – generator pominięty (instrukcja w README)."
+            echo "saved=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npm run generate
+
+      - name: Sprawdź linki w nowych kartach
+        if: steps.gen.outputs.saved != '0' && steps.gen.outputs.ids != ''
+        continue-on-error: true
+        run: npm run check-links -- "${{ steps.gen.outputs.ids }}"
+
+      - name: Sprawdź, czy aplikacja się buduje
+        if: steps.gen.outputs.saved != '0'
+        run: npm run build
+
+      - name: Commit i push
+        if: steps.gen.outputs.saved != '0'
+        run: |
+          git config user.name "ledgeknow-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add content/cards
+          git commit -m "Nowe karty: ${{ steps.gen.outputs.ids }}"
+          git push
+
+  deploy:
+    needs: generate
+    if: needs.generate.outputs.saved != '0'
+    uses: ./.github/workflows/deploy.yml
