@@ -1,0 +1,51 @@
+name: Powiadomienia (losowe pory)
+
+on:
+  schedule:
+    # co 2 godziny między ok. 7:00 a 22:00 czasu polskiego; przy każdym slocie „rzut kostką”
+    - cron: '17 6-20/2 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Wyślij na pewno (bez losowania)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Rzut kostką
+        id: dice
+        env:
+          FORCE: ${{ github.event.inputs.force }}
+          # średnio ok. 3 powiadomienia dziennie przy 8 slotach
+          PROBABILITY: ${{ vars.NOTIFY_PROBABILITY || '0.4' }}
+          HAS_SUB: ${{ secrets.PUSH_SUBSCRIPTION != '' }}
+        run: |
+          if [ "$HAS_SUB" != "true" ]; then echo "go=false" >> "$GITHUB_OUTPUT"; echo "Brak PUSH_SUBSCRIPTION – pomijam."; exit 0; fi
+          if [ "$FORCE" = "true" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          roll=$(python3 -c "import random; print('true' if random.random() < float('$PROBABILITY') else 'false')")
+          echo "go=$roll" >> "$GITHUB_OUTPUT"
+          echo "Wynik losowania: $roll"
+
+      - uses: actions/checkout@v4
+        if: steps.dice.outputs.go == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.dice.outputs.go == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.dice.outputs.go == 'true'
+        run: npm ci && npm run content
+      - if: steps.dice.outputs.go == 'true'
+        run: npm run notify
+        env:
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          VAPID_PUBLIC_KEY: ${{ vars.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ vars.VAPID_SUBJECT }}

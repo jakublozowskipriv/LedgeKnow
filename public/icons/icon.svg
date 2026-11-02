@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0618"/>
+      <stop offset="0.55" stop-color="#3a0ca3"/>
+      <stop offset="1" stop-color="#ff2a6d"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffb96"/>
+      <stop offset="0.5" stop-color="#ff9e64"/>
+      <stop offset="1" stop-color="#ff2a6d"/>
+    </linearGradient>
+    <mask id="m">
+      <rect width="512" height="512" fill="#fff"/>
+      <rect y="232" width="512" height="8" fill="#000"/>
+      <rect y="258" width="512" height="11" fill="#000"/>
+      <rect y="286" width="512" height="14" fill="#000"/>
+      <rect y="316" width="512" height="17" fill="#000"/>
+    </mask>
+    <clipPath id="above"><rect width="512" height="340"/></clipPath>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="250" r="150" fill="url(#sun)" mask="url(#m)" clip-path="url(#above)"/>
+  <rect y="340" width="512" height="172" fill="#0b0618" opacity="0.88"/>
+  <g stroke="#05d9e8" stroke-width="4" opacity="0.9">
+    <line x1="0" y1="340" x2="512" y2="340"/>
+    <line x1="0" y1="356" x2="512" y2="356"/>
+    <line x1="0" y1="380" x2="512" y2="380"/>
+    <line x1="0" y1="414" x2="512" y2="414"/>
+    <line x1="0" y1="462" x2="512" y2="462"/>
+    <line x1="256" y1="340" x2="256" y2="512"/>
+    <line x1="226" y1="340" x2="130" y2="512"/>
+    <line x1="286" y1="340" x2="382" y2="512"/>
+    <line x1="196" y1="340" x2="4" y2="512"/>
+    <line x1="316" y1="340" x2="508" y2="512"/>
+    <line x1="166" y1="340" x2="-122" y2="512"/>
+    <line x1="346" y1="340" x2="634" y2="512"/>
+  </g>
+</svg>
