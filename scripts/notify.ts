@@ -33,7 +33,9 @@ async function main() {
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:ledgeknow@example.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
   const bundle = JSON.parse(fs.readFileSync(path.join(ROOT, 'public', 'data', 'cards.json'), 'utf8')) as CardsBundle;
-  const cards = bundle.cards;
+  const now = new Date().toISOString().slice(0, 10);
+  // tylko karty już opublikowane (tygodniowa paczka ma rozłożone daty)
+  const cards = bundle.cards.filter((c) => c.added <= now);
   if (!cards.length) return;
 
   // Połowa powiadomień promuje świeże karty (z ostatnich 3 dni), reszta – losowe z całej biblioteki.

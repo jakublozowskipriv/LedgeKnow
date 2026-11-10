@@ -2,13 +2,17 @@ name: Nowe karty (Claude)
 
 on:
   schedule:
-    # codziennie ok. 5:20 czasu polskiego (zimą), 6:20 (latem) – karty są gotowe na poranek
-    - cron: '23 4 * * *'
+    # raz w tygodniu: poniedziałek ok. 5:20 czasu polskiego (zimą), 6:20 (latem).
+    # Paczka (domyślnie 7 kart) jest publikowana w aplikacji po jednej karcie dziennie.
+    - cron: '23 4 * * 1'
   workflow_dispatch:
     inputs:
       cards:
         description: 'Ile kart wygenerować'
-        default: '3'
+        default: '7'
+      spread_days:
+        description: 'Na ile dni rozłożyć publikację (0 = wszystkie od razu)'
+        default: '7'
 
 permissions:
   contents: write
@@ -22,7 +26,7 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     outputs:
       saved: ${{ steps.gen.outputs.saved }}
     steps:
@@ -37,7 +41,8 @@ jobs:
         id: gen
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          LEDGEKNOW_CARDS: ${{ github.event.inputs.cards || vars.LEDGEKNOW_CARDS || '3' }}
+          LEDGEKNOW_CARDS: ${{ github.event.inputs.cards || vars.LEDGEKNOW_CARDS || '7' }}
+          LEDGEKNOW_SPREAD_DAYS: ${{ github.event.inputs.spread_days || vars.LEDGEKNOW_SPREAD_DAYS || '7' }}
           LEDGEKNOW_MODEL: ${{ vars.LEDGEKNOW_MODEL }}
           LEDGEKNOW_EFFORT: ${{ vars.LEDGEKNOW_EFFORT }}
         run: |
