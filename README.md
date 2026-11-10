@@ -1,6 +1,6 @@
 # LedgeKnow ✦
 
-**Codzienna porcja losowej, ciekawej wiedzy** – mini-wykłady z kilkunastu dziedzin, podane krótko i tak, żeby naprawdę objaśniały koncepty. Webapp na telefon (PWA), ciemny vaporwave, działa offline i codziennie dostaje nowe karty wygenerowane i zweryfikowane przez Claude'a.
+**Codzienna porcja losowej, ciekawej wiedzy** – mini-wykłady z kilkunastu dziedzin, podane krótko i tak, żeby naprawdę objaśniały koncepty. Webapp na telefon (PWA), ciemny vaporwave, działa offline i co tydzień dostaje paczkę nowych kart wygenerowanych i zweryfikowanych przez Claude'a – publikowanych w aplikacji po jednej dziennie.
 
 ---
 
@@ -42,7 +42,8 @@ public/data/cards.json    ← paczka treści dla aplikacji
 dist/                     ← statyczna PWA (GitHub Pages)
 
 GitHub Actions:
-  generate.yml  codziennie ~5:20  → Claude (z wyszukiwaniem w sieci) pisze 3 karty → commit → deploy
+  generate.yml  poniedziałki ~5:20 → Claude (z wyszukiwaniem w sieci) pisze 7 kart → commit → deploy
+                                   (każda karta ma datę publikacji – aplikacja odsłania ok. 1 dziennie)
   notify.yml    co 2 h, 7–22      → „rzut kostką” → push z hakiem losowej karty (śr. ~3/dzień)
   deploy.yml    przy każdym pushu na main → build → GitHub Pages
 ```
@@ -84,11 +85,12 @@ Opcjonalne zmienne (*Variables*):
 
 | Zmienna | Domyślnie | Opis |
 |---|---|---|
-| `LEDGEKNOW_CARDS` | `3` | ile kart dziennie (ostatnia to zawsze „Wybór Claude'a”) |
+| `LEDGEKNOW_CARDS` | `7` | ile kart w tygodniowej paczce (jedna to zawsze „Wybór Claude'a”) |
+| `LEDGEKNOW_SPREAD_DAYS` | `7` | na ile dni rozłożyć publikację kart z paczki (`0` = wszystkie od razu) |
 | `LEDGEKNOW_MODEL` | `claude-opus-5-5` | model; `claude-sonnet-5-5` jest ~2× tańszy |
 | `LEDGEKNOW_EFFORT` | `high` | głębokość myślenia: `low` … `max` |
 
-**Koszt (szacunek):** jedna paczka 3 kart z wyszukiwaniem w sieci to zwykle kilkadziesiąt–kilkaset tysięcy tokenów wejścia (wyniki wyszukiwania) i kilkadziesiąt tysięcy wyjścia, czyli rzędu **0,3–1 USD dziennie** na Opusie. Realny koszt sprawdzisz w Console po kilku dniach. Jeśli jest za wysoki, przełącz na Sonnet albo zmniejsz `LEDGEKNOW_CARDS`.
+**Koszt:** generator działa raz w tygodniu. Pętla korzysta z prompt cachingu (kolejne tury czytają wcześniejszą rozmowę z cache po ułamku ceny), a log kroku „Generuj karty” na końcu podaje zużycie tokenów i liczbę wyszukiwań – z niego i z Console sprawdzisz realny koszt paczki. Dalsze dźwignie: mniej kart (`LEDGEKNOW_CARDS`), niższy `LEDGEKNOW_EFFORT` (np. `medium`) albo tańszy model (`claude-sonnet-5-5`) – każda z nich to już kompromis jakości, więc najlepiej zmieniać jedną naraz i porównać karty.
 
 Generator: każda karta przechodzi walidację (schemat, długość, quiz, duplikaty), linki do źródeł są sprawdzane, a aplikacja musi się zbudować – dopiero wtedy idzie commit i deploy. Styl i zasady redakcyjne są w [`scripts/prompts/style.md`](scripts/prompts/style.md) – edytuj śmiało.
 
@@ -104,7 +106,7 @@ Generator: każda karta przechodzi walidację (schemat, długość, quiz, duplik
 
 Częstotliwość zmienisz zmienną `NOTIFY_PROBABILITY` (domyślnie `0.4` × 8 slotów ≈ 3 dziennie) albo cronem w `notify.yml`.
 
-> Minuty GitHub Actions w prywatnym repo (2000/mies. za darmo): powiadomienia ~250, generator ~150, deploy ~60 minut miesięcznie – mieści się z zapasem.
+> Minuty GitHub Actions w prywatnym repo (2000/mies. za darmo): powiadomienia ~250, generator ~30, deploy ~30 minut miesięcznie – mieści się z zapasem.
 
 ---
 

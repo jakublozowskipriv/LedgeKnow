@@ -5,7 +5,9 @@
  *   ANTHROPIC_API_KEY=... npm run generate
  *
  * Zmienne środowiskowe (opcjonalne):
- *   LEDGEKNOW_CARDS   – ile kart w paczce (domyślnie 3, w tym 1 „Wybór Claude'a”)
+ *   LEDGEKNOW_CARDS   – ile kart w paczce (domyślnie 7, w tym 1 „Wybór Claude'a”)
+ *   LEDGEKNOW_SPREAD_DAYS – na ile dni rozłożyć publikację kart z paczki (domyślnie 7;
+ *                       0 = wszystkie od razu). Aplikacja pokazuje kartę dopiero od jej daty `added`.
  *   LEDGEKNOW_MODEL   – model (domyślnie claude-opus-5-5)
  *   LEDGEKNOW_EFFORT  – low | medium | high | xhigh | max (domyślnie high)
  *   LEDGEKNOW_DRY_RUN – "1" = pokaż plan i prompt, nie wołaj API
@@ -19,13 +21,24 @@ import { CATEGORIES } from '../src/shared/categories';
 import { CATEGORY_IDS, CONFIDENCE, FORMATS, frontmatterSchema, type CardFormat, type CategoryId } from '../src/shared/schema';
 import { CARDS_DIR, ROOT, loadAllCards, parseCardFile, serializeCard } from './lib/cards';
 
-const N = Math.max(1, Math.min(8, Number(process.env.LEDGEKNOW_CARDS ?? 3)));
+const N = Math.max(1, Math.min(10, Number(process.env.LEDGEKNOW_CARDS || 7)));
+const SPREAD_DAYS = Math.max(0, Math.min(14, Number(process.env.LEDGEKNOW_SPREAD_DAYS ?? 7)));
 const MODEL = process.env.LEDGEKNOW_MODEL || 'claude-opus-5-5';
 const EFFORT = (process.env.LEDGEKNOW_EFFORT || 'high') as 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 const DRY = process.env.LEDGEKNOW_DRY_RUN === '1';
-const MAX_TURNS = 16;
+const MAX_TURNS = 6 + 3 * N;
 
 const today = new Date().toISOString().slice(0, 10);
+
+/** Daty publikacji: karty z tygodniowej paczki „wychodzą” po jednej (mniej więcej) dziennie, w losowej kolejności. */
+const releaseDates: string[] = (() => {
+  const offsets = Array.from({ length: N }, (_, i) => (SPREAD_DAYS ? Math.floor((i * SPREAD_DAYS) / N) : 0));
+  for (let i = offsets.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [offsets[i], offsets[j]] = [offsets[j], offsets[i]];
+  }
+  return offsets.map((d) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10));
+})();
 
 // ───────────── plan paczki ─────────────
 
@@ -228,6 +241,7 @@ ${catalog}
   const saved: string[] = [];
   let nudged = false;
   let jsonRetries = 0;
+  const totals = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, searches: 0 };
 
   const tools: Anthropic.Beta.Messages.BetaToolUnion[] = [
     { type: 'web_search_20260209', name: 'web_search', max_uses: 6 * N },
@@ -249,6 +263,9 @@ ${catalog}
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
       output_config: { effort: EFFORT },
+      // Automatyczne cache'owanie: każda tura pętli wysyła całą dotychczasową rozmowę
+      // (z wynikami wyszukiwania), więc bez cache płacimy za nią wielokrotnie w pełnej cenie.
+      cache_control: { type: 'ephemeral' },
       system,
       tools,
       messages,
@@ -265,7 +282,15 @@ ${catalog}
       throw e;
     }
     messages.push({ role: 'assistant', content: msg.content as Anthropic.Beta.Messages.BetaContentBlockParam[] });
-    console.log(`  tura ${turn + 1}: stop_reason=${msg.stop_reason}, model=${msg.model}, in=${msg.usage.input_tokens}, out=${msg.usage.output_tokens}`);
+    const u = msg.usage;
+    totals.input += u.input_tokens;
+    totals.cacheRead += u.cache_read_input_tokens ?? 0;
+    totals.cacheWrite += u.cache_creation_input_tokens ?? 0;
+    totals.output += u.output_tokens;
+    totals.searches += u.server_tool_use?.web_search_requests ?? 0;
+    console.log(
+      `  tura ${turn + 1}: stop_reason=${msg.stop_reason}, model=${msg.model}, in=${u.input_tokens}, cache_read=${u.cache_read_input_tokens ?? 0}, cache_write=${u.cache_creation_input_tokens ?? 0}, out=${u.output_tokens}`,
+    );
 
     if (msg.stop_reason === 'refusal') {
       console.error('Model odmówił wykonania (refusal):', JSON.stringify(msg.stop_details));
@@ -281,7 +306,7 @@ ${catalog}
           return { type: 'tool_result', tool_use_id: tu.id, is_error: true, content: 'Wywołanie zostało ucięte (max_tokens). Zapisz kartę ponownie, w całości.' };
         }
         try {
-          const id = saveCard(tu.input, existingIds, existingTitles);
+          const id = saveCard(tu.input, existingIds, existingTitles, releaseDates[saved.length] ?? today);
           saved.push(id);
           existingIds.add(id);
           console.log(`  ✔ zapisano ${id}`);
@@ -317,12 +342,15 @@ ${catalog}
     process.exit(1);
   }
   console.log(`\n✔ Gotowe: ${saved.length}/${N} nowych kart: ${saved.join(', ') || '—'}`);
+  console.log(
+    `  Tokeny: wejście ${totals.input}, z cache ${totals.cacheRead}, zapis do cache ${totals.cacheWrite}, wyjście ${totals.output}; wyszukiwań: ${totals.searches}`,
+  );
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `saved=${saved.length}\nids=${saved.join(',')}\n`);
   if (!saved.length) process.exit(1);
 }
 
 /** Waliduje dane z narzędzia, zapisuje plik .md i zwraca id. Rzuca błąd z czytelnym opisem dla modelu. */
-function saveCard(raw: unknown, existingIds: Set<string>, existingTitles: Set<string>): string {
+function saveCard(raw: unknown, existingIds: Set<string>, existingTitles: Set<string>, added = today): string {
   const input = cardInput.parse(raw);
   const id = slugify(input.id || input.title);
   if (!id) throw new Error('Puste id.');
@@ -354,7 +382,7 @@ function saveCard(raw: unknown, existingIds: Set<string>, existingTitles: Set<st
     claudePick: input.claudePickWhy ? { why: input.claudePickWhy.trim() } : undefined,
     onThisDay: input.onThisDay ?? undefined,
     onThisDayNote: input.onThisDay ? input.onThisDayNote ?? undefined : undefined,
-    added: today,
+    added,
   });
 
   const strip = (s: string) => s.replace(/^\s*#{1,6}\s+.*$/gm, '').trim();
